@@ -7,6 +7,8 @@ import {
   MapPin, CreditCard, Clock, Globe, MessageSquareCheck, Sliders, Layers
 } from "lucide-react";
 
+const API_BASE_URL = "https://paypilot-ai-fq80.onrender.com";
+
 export default function App() {
   const [dashboardData, setDashboardData] = useState({
     total_transactions: 0,
@@ -52,8 +54,8 @@ export default function App() {
   const fetchData = async () => {
     try {
       const [dashRes, txRes] = await Promise.all([
-        fetch("http://127.0.0.1:8000/api/dashboard"),
-        fetch("http://127.0.0.1:8000/api/transactions/risk")
+        fetch(`${API_BASE_URL}/api/dashboard`),
+        fetch(`${API_BASE_URL}/api/transactions/risk`)
       ]);
       if (dashRes.ok) setDashboardData(await dashRes.json());
       if (txRes.ok) {
@@ -73,7 +75,7 @@ export default function App() {
 
   const handleUpdatePolicy = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/ml/policy", {
+      const res = await fetch(`${API_BASE_URL}/api/ml/policy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -98,7 +100,7 @@ export default function App() {
     setActiveView("details");
 
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/transactions/${tx.transaction_id}/recovery-plan`);
+      const res = await fetch(`${API_BASE_URL}/api/transactions/${tx.transaction_id}/recovery-plan`);
       if (res.ok) {
         const data = await res.json();
         setRecoveryPlan(data.recovery_plan);
@@ -108,7 +110,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/transactions/${tx.transaction_id}/chargeback-defense`);
+      const res = await fetch(`${API_BASE_URL}/api/transactions/${tx.transaction_id}/chargeback-defense`);
       if (res.ok) {
         const data = await res.json();
         setDefenseDossier(data.defense);
@@ -121,7 +123,7 @@ export default function App() {
   const handleManualAction = async (actionName) => {
     if (!selectedTx) return;
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/transactions/action", {
+      const res = await fetch(`${API_BASE_URL}/api/transactions/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -141,7 +143,7 @@ export default function App() {
   const handleInjectAttack = async (scenario) => {
     setIsInjecting(true);
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/simulator/inject-attack", {
+      const res = await fetch(`${API_BASE_URL}/api/simulator/inject-attack`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scenario })
@@ -165,7 +167,7 @@ export default function App() {
 
   const handleProcessPayment = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/payment/initiate", {
+      const res = await fetch(`${API_BASE_URL}/api/payment/initiate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -190,7 +192,7 @@ export default function App() {
             description: `Payment ${result.transaction_id}`,
             order_id: result.razorpay_order_id?.startsWith("order_") ? result.razorpay_order_id : undefined,
             handler: async function (response) {
-              await fetch("http://127.0.0.1:8000/api/payment/verify-success", {
+              await fetch(`${API_BASE_URL}/api/payment/verify-success`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -228,7 +230,7 @@ export default function App() {
     let orderId = undefined;
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/payment/initiate", {
+      const res = await fetch(`${API_BASE_URL}/api/payment/initiate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -260,7 +262,7 @@ export default function App() {
       description: `Recovery Payment: ${txId}`,
       order_id: orderId,
       handler: async function (response) {
-        await fetch("http://127.0.0.1:8000/api/payment/verify-success", {
+        await fetch(`${API_BASE_URL}/api/payment/verify-success`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -300,7 +302,7 @@ export default function App() {
     if (!selectedTx) return;
     setIsRecovering(true);
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/recovery/dispatch", {
+      const res = await fetch(`${API_BASE_URL}/api/recovery/dispatch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -330,7 +332,7 @@ export default function App() {
   const handleBatchSalvage = async () => {
     setIsBatchSalvaging(true);
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/recovery/batch-dispatch", { method: "POST" });
+      const res = await fetch(`${API_BASE_URL}/api/recovery/batch-dispatch`, { method: "POST" });
       if (res.ok) {
         const data = await res.json();
         setActionNotice(`⚡ Batch Recovery Triggered: ${data.dispatched_count} links sent (₹${data.total_batch_value.toLocaleString()})`);
@@ -416,7 +418,7 @@ export default function App() {
     setCopilotMessages(prev => [...prev, { role: "user", text: userMsg, time: "Now" }]);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/copilot/chat", {
+      const res = await fetch(`${API_BASE_URL}/api/copilot/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: userMsg })

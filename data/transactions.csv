@@ -1,0 +1,24 @@
+transaction_id,customer_id,amount,status,payment_method,device_id,location,attempt_count,is_new_device,is_new_location,timestamp
+TXN001,C001,499,salvaged,UPI,DEV001,Kolkata,1,0,0,
+TXN002,C002,1200,success,Card,DEV002,Delhi,1,0,0,
+TXN003,C003,850,success,UPI,DEV003,Mumbai,1,0,0,
+TXN004,C001,650,success,UPI,DEV001,Kolkata,1,0,0,
+TXN005,C004,2300,success,Card,DEV004,Bangalore,1,0,0,
+TXN006,C005,499,failed,UPI,DEV005,Chennai,2,0,0,
+TXN007,C002,1800,success,Card,DEV002,Delhi,1,0,0,
+TXN008,C003,950,success,UPI,DEV003,Mumbai,1,0,0,
+TXN009,C006,1500,success,NetBanking,DEV006,Pune,1,0,0,
+TXN010,C001,520,success,UPI,DEV001,Kolkata,1,0,0,
+TXN011,C007,49999,failed,Card,DEV999,Kolkata,4,1,1,
+TXN012,C008,75000,failed,UPI,DEV888,Delhi,5,1,1,
+TXN013,C002,2100,success,Card,DEV002,Delhi,1,0,0,
+TXN014,C003,1100,success,UPI,DEV003,Mumbai,1,0,0,
+TXN015,C009,65000,failed,Card,DEV777,Goa,6,1,1,
+TXN016,C004,2400,success,Card,DEV004,Bangalore,1,0,0,
+TXN017,C005,700,success,UPI,DEV005,Chennai,1,0,0,
+TXN018,C010,89000,failed,UPI,DEV666,Kolkata,7,1,1,
+TXN019,C006,1700,success,NetBanking,DEV006,Pune,1,0,0,
+PAY-C3BC5020,C001,499.0,salvaged,UPI,DEV-001,Bengaluru,1,0,0,2026-08-25 03:49:25
+PAY-9064852C,C001,499.0,pending,UPI,DEV-001,Bengaluru,1,0,0,2026-08-25 03:49:45
+PAY-93FBBDAE,C001,4500.0,pending,UPI,DEV-001,Bengaluru,1,0,0,2026-08-25 03:50:20
+PAY-B494B1C9,C001,2300.0,pending,UPI,DEV-001,Bengaluru,1,0,0,2026-08-25 03:52:08

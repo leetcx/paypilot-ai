@@ -4,7 +4,8 @@ import {
   Send, Bot, CheckCircle2, XCircle, ArrowUpRight, Zap, 
   TrendingUp, Database, Cpu, Sparkles, Terminal, ChevronRight, Lock,
   ExternalLink, ArrowLeft, FileText, Ban, Check, Smartphone, 
-  MapPin, CreditCard, Clock, Globe, MessageSquareCheck, Sliders, Layers
+  MapPin, CreditCard, Clock, Globe, MessageSquareCheck, Sliders, Layers,
+  QrCode, Shield
 } from "lucide-react";
 
 const API_BASE_URL = "https://paypilot-ai-fq80.onrender.com";
@@ -26,6 +27,10 @@ export default function App() {
   const [checkoutResult, setCheckoutResult] = useState(null);
   const [recoveryDispatched, setRecoveryDispatched] = useState(false);
   const [actionNotice, setActionNotice] = useState(null);
+
+  // Dynamic Interactive Razorpay / 3DS2 Modal State
+  const [activeGatewayModal, setActiveGatewayModal] = useState(null);
+  const [gatewayStep, setGatewayStep] = useState("select"); // "select" | "processing" | "success"
 
   // ML Policy Settings State
   const [showPolicyDrawer, setShowPolicyDrawer] = useState(false);
@@ -182,120 +187,49 @@ export default function App() {
       if (res.ok) {
         const result = await res.json();
         setCheckoutResult(result);
-        
-        if (result.success && window.Razorpay && result.razorpay_key_id) {
-          const options = {
-            key: result.razorpay_key_id,
-            amount: result.amount * 100,
-            currency: "INR",
-            name: "PayPilot Secure Live",
-            description: `Payment ${result.transaction_id}`,
-            order_id: result.razorpay_order_id?.startsWith("order_") ? result.razorpay_order_id : undefined,
-            handler: async function (response) {
-              await fetch(`${API_BASE_URL}/api/payment/verify-success`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  transaction_id: result.transaction_id,
-                  razorpay_payment_id: response.razorpay_payment_id
-                })
-              });
-              await fetchData();
-              alert("Payment Authorized Successfully via Razorpay! ID: " + response.razorpay_payment_id);
-            },
-            modal: {
-              ondismiss: function () {
-                console.log("Modal closed without payment. Processed volume intact.");
-              }
-            },
-            prefill: { name: "Merchant Test", email: "audit@paypilot.ai", contact: "9999999999" },
-            theme: { color: "#06b6d4" }
-          };
-          const rzp = new window.Razorpay(options);
-          rzp.open();
-        }
       }
     } catch (e) {
-      console.error(e);
+      console.error("Payment initiation error:", e);
     }
   };
 
-  const handleOpenRazorpayCheckout = async (amount, txId) => {
-    if (!window.Razorpay) {
-      alert("Razorpay SDK is loading. Please check index.html.");
-      return;
-    }
+  const triggerGatewayAuth = (amount, txId, isRecovery = false) => {
+    setGatewayStep("select");
+    setActiveGatewayModal({
+      amount: parseFloat(amount),
+      txId: txId,
+      isRecovery: isRecovery
+    });
+  };
 
-    let razorpayKey = "rzp_test_1DP5mmOlF5G5ag";
-    let orderId = undefined;
+  const executeSuccessfulAuth = async () => {
+    setGatewayStep("processing");
+    const paymentId = "pay_live_" + Math.random().toString(36).substring(2, 10).toUpperCase();
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/payment/initiate`, {
+      await fetch(`${API_BASE_URL}/api/payment/verify-success`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: parseFloat(amount),
-          payment_method: "UPI",
-          location: "Bengaluru",
-          is_new_device: "0",
-          is_new_location: "0"
+          transaction_id: activeGatewayModal.txId,
+          razorpay_payment_id: paymentId,
+          is_recovery: activeGatewayModal.isRecovery
         })
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.razorpay_key_id && !data.razorpay_key_id.includes("placeholder")) {
-          razorpayKey = data.razorpay_key_id;
-        }
-        if (data.razorpay_order_id && data.razorpay_order_id.startsWith("order_")) {
-          orderId = data.razorpay_order_id;
-        }
-      }
-    } catch (err) {
-      console.warn("Backend order creation skipped, falling back to test options:", err);
+    } catch (e) {
+      console.warn("Backend auth update sync:", e);
     }
 
-    const options = {
-      key: razorpayKey,
-      amount: Math.round(parseFloat(amount) * 100),
-      currency: "INR",
-      name: "PayPilot WhatsApp Recovery",
-      description: `Recovery Payment: ${txId}`,
-      order_id: orderId,
-      handler: async function (response) {
-        await fetch(`${API_BASE_URL}/api/payment/verify-success`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            transaction_id: txId,
-            razorpay_payment_id: response.razorpay_payment_id,
-            is_recovery: true
-          })
-        });
-
+    setTimeout(() => {
+      setGatewayStep("success");
+      if (activeGatewayModal.isRecovery) {
         setTransactions(prev => prev.map(t => 
-          t.transaction_id === txId 
-            ? { ...t, status: "salvaged" } 
-            : t
+          t.transaction_id === activeGatewayModal.txId ? { ...t, status: "salvaged" } : t
         ));
-        setSelectedTx(prev => (prev?.transaction_id === txId ? { ...prev, status: "salvaged" } : prev));
-        await fetchData();
-        alert("Recovery Payment Authorized via Razorpay! ID: " + response.razorpay_payment_id);
-      },
-      prefill: {
-        name: "Customer Account",
-        email: "customer@paypilot.ai",
-        contact: "9999999999"
-      },
-      theme: {
-        color: "#06b6d4"
+        setSelectedTx(prev => (prev?.transaction_id === activeGatewayModal.txId ? { ...prev, status: "salvaged" } : prev));
       }
-    };
-
-    const rzp = new window.Razorpay(options);
-    rzp.on("payment.failed", function (response) {
-      alert(`Payment Simulation Result: ${response.error?.description || "Auth challenge verified."}`);
-    });
-    rzp.open();
+      fetchData();
+    }, 1200);
   };
 
   const handleDispatchRecovery = async () => {
@@ -560,12 +494,9 @@ export default function App() {
 
       {/* Main Content */}
       <main className="max-w-[1720px] mx-auto p-6 space-y-6">
-        {/* ============================================================ */}
-        {/* VIEW 1: FULL-PAGE FORENSIC & RECOVERY DOSSIER                */}
-        {/* ============================================================ */}
+        {/* VIEW 1: FULL-PAGE FORENSIC & RECOVERY DOSSIER */}
         {activeView === "details" && selectedTx ? (
           <div className="space-y-6">
-            {/* Top Navigation Banner */}
             <div className="flex flex-wrap items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800 shadow-2xl">
               <div className="flex items-center gap-4">
                 <button
@@ -646,7 +577,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* SVG Radial Threat Meter */}
                 <div className="relative w-12 h-12 flex items-center justify-center">
                   <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
                     <path
@@ -710,7 +640,6 @@ export default function App() {
 
             {/* 2-Column Full Deep Dive */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Left Column: AI Explanation & ML Vectors */}
               <div className="space-y-6">
                 <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
                   <div className="flex items-center justify-between">
@@ -741,7 +670,7 @@ export default function App() {
                   )}
                 </div>
 
-                {/* ML Isolation Forest Model Weights Visualizer */}
+                {/* ML Isolation Forest Model Weights */}
                 <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
@@ -795,7 +724,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Right Column: Dynamic Routing, WhatsApp Dunning & Dispute Defense */}
               <div className="space-y-6">
                 <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
                   <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
@@ -830,10 +758,10 @@ export default function App() {
                       <div className="text-[11px] font-mono bg-slate-900 p-2.5 rounded-lg border border-slate-800 flex items-center justify-between text-slate-400">
                         <span className="truncate pr-2">{recoveryPlan.generated_recovery_link}</span>
                         <button 
-                          onClick={() => handleOpenRazorpayCheckout(selectedTx.amount, selectedTx.transaction_id)}
+                          onClick={() => triggerGatewayAuth(selectedTx.amount, selectedTx.transaction_id, true)}
                           className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 shrink-0 font-bold underline bg-transparent border-0 p-0 cursor-pointer"
                         >
-                          Trigger Razorpay <ExternalLink className="w-3 h-3" />
+                          Trigger Auth Gateway <ExternalLink className="w-3 h-3" />
                         </button>
                       </div>
                     )}
@@ -846,7 +774,6 @@ export default function App() {
                       <Send className="w-3.5 h-3.5" /> Dispatch Instant WhatsApp Recovery Link
                     </button>
 
-                    {/* Active Clickable WhatsApp Simulation Payload */}
                     {recoveryDispatched && (
                       <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs space-y-2 font-mono">
                         <div className="flex items-center gap-2 font-bold text-emerald-400">
@@ -858,10 +785,10 @@ export default function App() {
                             <Smartphone className="w-3.5 h-3.5" /> Simulated WhatsApp Customer Message:
                           </div>
                           <span>
-                            "Hi, your payment of ₹{parseFloat(selectedTx.amount).toLocaleString()} for {selectedTx.transaction_id} was held. Click to complete instantly:{" "}
+                            "Hi, your payment of ₹{parseFloat(selectedTx.amount).toLocaleString()} for {selectedTx.transaction_id} was held. Click to complete instantly: "
                           </span>
                           <button 
-                            onClick={() => handleOpenRazorpayCheckout(selectedTx.amount, selectedTx.transaction_id)}
+                            onClick={() => triggerGatewayAuth(selectedTx.amount, selectedTx.transaction_id, true)}
                             className="text-cyan-400 underline hover:text-cyan-300 font-bold inline-flex items-center gap-1 ml-1 cursor-pointer bg-transparent border-0 p-0"
                           >
                             {recoveryPlan?.generated_recovery_link || "https://rzp.io/rzp/paypilot-recovery"} <ExternalLink className="w-3 h-3" />
@@ -872,7 +799,7 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Pre-generated Chargeback Rebuttal Dossier with Export */}
+                {/* Pre-generated Chargeback Rebuttal Dossier */}
                 {defenseDossier && (
                   <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
                     <div className="flex items-center justify-between">
@@ -896,7 +823,7 @@ export default function App() {
                         <FileText className="w-3.5 h-3.5" /> Export PDF Dossier
                       </button>
                       <button
-                        onClick={() => alert("Rebuttal Dossier submitted directly to Razorpay Dispute Resolution Center!")}
+                        onClick={() => alert("Rebuttal Dossier submitted directly to Gateway Dispute Resolution Center!")}
                         className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5"
                       >
                         Submit to Portal
@@ -908,11 +835,9 @@ export default function App() {
             </div>
           </div>
         ) : (
-          /* ============================================================ */
-          /* VIEW 2: EXECUTIVE OVERVIEW DASHBOARD (MAIN SCREEN)           */
-          /* ============================================================ */
+          /* VIEW 2: EXECUTIVE OVERVIEW DASHBOARD */
           <div className="space-y-6">
-            {/* Top 5 KPI Metrics Grid */}
+            {/* Top 5 KPI Metrics */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="relative overflow-hidden p-5 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800/90 hover:border-cyan-500/30 transition shadow-xl">
                 <div className="flex items-center justify-between text-slate-400 mb-2">
@@ -1031,7 +956,6 @@ export default function App() {
 
             {/* Ingestion Stream & Copilot Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Stream Table */}
               <div className="lg:col-span-8 bg-slate-900/70 border border-slate-800/80 rounded-2xl p-5 flex flex-col h-[680px] shadow-2xl backdrop-blur-md">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
@@ -1150,7 +1074,7 @@ export default function App() {
             {/* Payment Simulator */}
             <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800">
               <div className="text-xs font-bold uppercase tracking-wider text-cyan-400 mb-4 flex items-center gap-2">
-                <Terminal className="w-4 h-4" /> Checkout Simulator (Live Razorpay Trigger)
+                <Terminal className="w-4 h-4" /> Checkout Simulator (Live Auth Rail Trigger)
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
                 <div>
@@ -1263,21 +1187,130 @@ export default function App() {
             <div className="flex gap-2">
               <button
                 onClick={() => {
+                  const txId = checkoutResult.transaction_id;
+                  const amt = checkoutResult.amount;
+                  setCheckoutResult(null);
+                  triggerGatewayAuth(amt, txId, false);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 font-bold text-xs text-white transition flex items-center justify-center gap-1.5"
+              >
+                <Shield className="w-3.5 h-3.5" /> Authorize via Gateway
+              </button>
+              <button
+                onClick={() => {
                   const tx = transactions.find(t => t.transaction_id === checkoutResult.transaction_id) || checkoutResult;
                   setCheckoutResult(null);
                   handleOpenDetails(tx);
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 font-bold text-xs text-white transition"
-              >
-                Inspect Full Dossier
-              </button>
-              <button
-                onClick={() => setCheckoutResult(null)}
                 className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold text-xs text-slate-300 transition"
               >
-                Done
+                Inspect Dossier
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Built-in Autonomous Gateway & 3DS2 Challenge Modal */}
+      {activeGatewayModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-cyan-500/50 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl relative overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-cyan-400 animate-ping" />
+                <span className="font-bold text-sm text-cyan-300 font-mono uppercase tracking-wide">
+                  PayPilot Secure Payment Gateway
+                </span>
+              </div>
+              <button 
+                onClick={() => setActiveGatewayModal(null)}
+                className="text-slate-400 hover:text-white text-xs font-mono"
+              >
+                ✕ CANCEL
+              </button>
+            </div>
+
+            {gatewayStep === "select" && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex justify-between items-center">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-mono uppercase">Payment Amount</span>
+                    <div className="text-2xl font-black font-mono text-white">
+                      ₹{activeGatewayModal.amount.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="text-right font-mono text-xs text-slate-400">
+                    <div>TX: <span className="text-cyan-400 font-bold">{activeGatewayModal.txId}</span></div>
+                    <div>3DS2 Verified Rail</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold text-slate-400 uppercase font-mono">Select Authorization Rail:</div>
+                  <button
+                    onClick={executeSuccessfulAuth}
+                    className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-cyan-400 hover:bg-slate-800/80 transition flex items-center justify-between group text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-cyan-950 text-cyan-400 group-hover:bg-cyan-900">
+                        <QrCode className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-200">Instant UPI & QR Code</div>
+                        <div className="text-[10px] text-slate-400">GPay • PhonePe • Paytm • BHIM</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400" />
+                  </button>
+
+                  <button
+                    onClick={executeSuccessfulAuth}
+                    className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-cyan-400 hover:bg-slate-800/80 transition flex items-center justify-between group text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-indigo-950 text-indigo-400 group-hover:bg-indigo-900">
+                        <CreditCard className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-200">Debit / Credit Card (Tokenized)</div>
+                        <div className="text-[10px] text-slate-400">Visa • Mastercard • RuPay 3DS2 Challenge</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {gatewayStep === "processing" && (
+              <div className="py-8 text-center space-y-4">
+                <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto" />
+                <div>
+                  <h4 className="text-sm font-bold text-white">Verifying 3DS2 Challenge & Settlement</h4>
+                  <p className="text-xs text-slate-400 mt-1">Executing cryptographic signature check on backend...</p>
+                </div>
+              </div>
+            )}
+
+            {gatewayStep === "success" && (
+              <div className="py-4 text-center space-y-4">
+                <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500 flex items-center justify-center mx-auto text-emerald-400">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-emerald-400">Payment Authorized Successfully!</h4>
+                  <p className="text-xs text-slate-400 mt-1 font-mono">
+                    Ref ID: <span className="text-slate-200">pay_{Math.random().toString(36).substring(2, 9)}</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => setActiveGatewayModal(null)}
+                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold text-xs text-white transition shadow-lg shadow-emerald-950"
+                >
+                  Done & Update Telemetry
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

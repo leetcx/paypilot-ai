@@ -10,7 +10,7 @@ import {
 
 // For local testing use "http://127.0.0.1:8000"
 // For live production deployment use "https://paypilot-ai-fq80.onrender.com"
-const API_BASE_URL = "https://paypilot-ai-fq80.onrender.com";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://paypilot-ai-fq80.onrender.com";
 export default function App() {
   const [dashboardData, setDashboardData] = useState({
     total_transactions: 1482,
